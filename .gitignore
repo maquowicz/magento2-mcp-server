@@ -1,5 +1,6 @@
-package-lock.json
-node_modules/
 .clinerules/
 .vscode/
+.data/
+package-lock.json
+node_modules/
 build/

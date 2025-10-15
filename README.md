@@ -234,6 +234,7 @@ This will allow you to set breakpoints, inspect variables, and step through the 
 - **Authorization Fix**: Resolved issue with extra quotes in Bearer token header.
 - **Conditional Logging**: All debug logs are now toggled via DEBUG env var.
 - **MCP Integration**: Tested with Cline; supports stdio transport for tools like magento_rest_api.
+- **Schema Caching**: Added file-based caching for the REST API schema in .data/cache/schema.json with 1-hour expiration to minimize repeated API fetches and improve performance.
 - **Known Issues**: None; server is production-ready for REST API interactions.
 
 ## License
