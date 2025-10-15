@@ -62,7 +62,7 @@ export function createCallToolHandler(url: string, getToken: () => Promise<strin
       });
       const apiResponse = await fetch(fullUrl, {
         method,
-        body: body ? JSON.parse(body) : undefined,
+        body: body || undefined,
         headers: requestHeaders,
         dispatcher
       });
