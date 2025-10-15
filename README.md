@@ -130,6 +130,22 @@ const response = await mcp.magento_rest_api({
 });
 ```
 
+## Available Resources
+
+### Magento REST API Schema (Searchable)
+
+Access the full Magento REST API schema or a filtered subset to avoid large context loads.
+
+- **Full Schema**: `magento://rest/schema`
+
+- **Keyword Search**: `magento://rest/schema?search=customer`  
+  Matches any string field (e.g., paths, descriptions) containing "customer" (case-insensitive). Returns full matching resource structures.
+
+- **Regex Search**: `magento://rest/schema?search=/^\/V1\/products/`  
+  Matches using regex (e.g., paths starting with /V1/products). Flags like /i for case-insensitive can be added.
+
+Returns a filtered JSON subset mirroring the schema structure, or `{}` if no matches.
+
 ## Development
 
 1. Clone the repository
