@@ -42,7 +42,7 @@ export function createCallToolHandler(url: string, getToken: () => Promise<strin
       const token = await getToken();
       if (process.env.DEBUG === 'true') console.log(`Using token: ${token}`);
       
-      const fullUrl = `${url}${path}${query}`;
+      const fullUrl = `${url}${path}${query ? (query.startsWith('?') ? query : '?' + query) : ''}`;
       const requestHeaders = {
         ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}),
         'Accept': 'application/json',
