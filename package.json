@@ -1,6 +1,6 @@
 {
   "name": "@maquowicz/magento2-mcp-server",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Magento 2 REST API MPC Server",
   "main": "build/index.js",
   "scripts": {
