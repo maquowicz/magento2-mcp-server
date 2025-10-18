@@ -9,7 +9,7 @@ export function createListResourcesHandler() {
         uri: 'magento://rest/schema',
         name: 'Magento REST API Schema (Searchable)',
         mimeType: "application/json",
-        description: "Full Magento REST API schema, or filtered subset via ?search=keyword (exact, case-insensitive) or ?search=/regex/ (regex, e.g., /customers/i). Searches all string fields (paths, descriptions, etc.) and returns full matching structures to preserve context.",
+        description: "Full Magento REST API schema, or filtered subset via ?search=keyword (multi-word queries use OR logic across words for broader matches, case-insensitive) or ?search=/regex/ (regex, e.g., /customers/i). Searches all string fields (paths, descriptions, etc.) and returns full matching structures to preserve context. For exact paths, use regex with escaped slashes like /V1/eav\/attribute-options/i.",
       }
     ]
   });
@@ -86,15 +86,16 @@ function searchSchema(schema: any, query: string): any {
     return {};
   }
 
+  const queryTrim = query.trim();
   let isRegex = false;
   let regex: RegExp | null = null;
   let keyword: string = '';
 
-  if (query.startsWith('/')) {
-    const lastSlashIndex = query.lastIndexOf('/');
+  if (queryTrim.startsWith('/')) {
+    const lastSlashIndex = queryTrim.lastIndexOf('/');
     if (lastSlashIndex > 0) {
-      const pattern = query.substring(1, lastSlashIndex);
-      const flagsStr = query.substring(lastSlashIndex + 1);
+      const pattern = queryTrim.substring(1, lastSlashIndex);
+      const flagsStr = queryTrim.substring(lastSlashIndex + 1).trim();
       if (/^[gimyus]*$/.test(flagsStr)) {
         try {
           const flags = flagsStr || 'i';
@@ -105,20 +106,26 @@ function searchSchema(schema: any, query: string): any {
           return {};
         }
       } else {
-        keyword = query.toLowerCase();
+        keyword = queryTrim.toLowerCase();
       }
     } else {
-      keyword = query.toLowerCase();
+      keyword = queryTrim.toLowerCase();
     }
   } else {
-    keyword = query.toLowerCase();
+    keyword = queryTrim.toLowerCase();
   }
+
+  const words = keyword.split(/\s+/).filter(w => w.length > 0);
 
   function checkMatch(value: string): boolean {
     if (isRegex && regex) {
       return regex.test(value);
     } else {
-      return value.toLowerCase().includes(keyword);
+      const lowerValue = value.toLowerCase();
+      if (words.length === 0) {
+        return false;
+      }
+      return words.some(word => lowerValue.includes(word.toLowerCase()));
     }
   }
 

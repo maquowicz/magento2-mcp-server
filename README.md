@@ -139,10 +139,10 @@ Access the full Magento REST API schema or a filtered subset to avoid large cont
 - **Full Schema**: `magento://rest/schema`
 
 - **Keyword Search**: `magento://rest/schema?search=customer`  
-  Matches any string field (e.g., paths, descriptions) containing "customer" (case-insensitive). Returns full matching resource structures.
+  Matches any string field (e.g., paths, descriptions) containing any of the keywords (multi-word queries use OR logic across words for broader matches, case-insensitive). Returns full matching resource structures.
 
 - **Regex Search**: `magento://rest/schema?search=/^\/V1\/products/`  
-  Matches using regex (e.g., paths starting with /V1/products). Flags like /i for case-insensitive can be added.
+  Matches using regex (e.g., paths starting with /V1/products). Flags like /i for case-insensitive can be added. For exact paths, use regex with escaped slashes like `/V1/eav\/attribute-options/i`.
 
 Returns a filtered JSON subset mirroring the schema structure, or `{}` if no matches.
 
