@@ -1,4 +1,5 @@
 import { Agent, fetch } from 'undici';
+import { log } from '../lib/logger.js';
 
 export function createListToolsHandler() {
   return async (): Promise<any> => ({
@@ -8,19 +9,19 @@ export function createListToolsHandler() {
       inputSchema: {
         type: 'object',
         properties: {
-          path: { 
+          path: {
             type: 'string',
             description: 'REST API path to call starting with /rest',
           },
-          method: { 
+          method: {
             type: 'string',
             description: 'HTTP method to use',
           },
-          body: { 
+          body: {
             type: 'string',
             description: 'JSON body to send with the request',
           },
-          query: { 
+          query: {
             type: 'string',
             description: 'Query parameters to send with the request starting with ?',
           },
@@ -35,26 +36,24 @@ export function createCallToolHandler(url: string, getToken: () => Promise<strin
   return async (request: any): Promise<any> => {
     if (request.params.name === 'magento_rest_api') {
       const { path, method, body, query } = request.params.arguments;
-      
-      if (process.env.DEBUG === 'true') console.log(`Making API call: ${method} ${url}${path}${query}`);
-      if (process.env.DEBUG === 'true') console.log(`Body: ${body || 'none'}`);
-      
+
+      log.debug(`Making API call: ${method} ${url}${path}${query}`);
+      log.debug(`Body: ${body || 'none'}`);
+
       const token = await getToken();
-      if (process.env.DEBUG === 'true') console.log(`Using token: ${token}`);
-      
+      log.debug(`Using token: ${token}`);
+
       const fullUrl = `${url}${path}${query ? (query.startsWith('?') ? query : '?' + query) : ''}`;
       const requestHeaders = {
         ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}),
         'Accept': 'application/json',
         'Authorization': `Bearer ${token}`.replace(/"/g, '')
       };
-      if (process.env.DEBUG === 'true') {
-        console.log(`Request URL: ${fullUrl}`);
-        console.log(`Request method: ${method}`);
-        console.log(`Authorization header value: ${requestHeaders.Authorization}`);
-        console.log(`Request headers: ${JSON.stringify(requestHeaders, null, 2)}`);
-      }
-      
+      log.debug(`Request URL: ${fullUrl}`);
+      log.debug(`Request method: ${method}`);
+      log.debug(`Authorization header value: ${requestHeaders.Authorization}`);
+      log.debug(`Request headers: ${JSON.stringify(requestHeaders, null, 2)}`);
+
       const dispatcher = new Agent({
         connect: {
           rejectUnauthorized: false,
@@ -67,18 +66,17 @@ export function createCallToolHandler(url: string, getToken: () => Promise<strin
         dispatcher
       });
 
-      if (process.env.DEBUG === 'true') console.log(`API response status: ${apiResponse.status} ${apiResponse.statusText}`);
-      const responseHeaders = Object.fromEntries(apiResponse.headers.entries());
-      if (process.env.DEBUG === 'true') console.log(`API response headers: ${JSON.stringify(responseHeaders, null, 2)}`);
+      log.debug(`API response status: ${apiResponse.status} ${apiResponse.statusText}`);
+      log.debug(`API response headers: ${JSON.stringify(Object.fromEntries(apiResponse.headers.entries()), null, 2)}`);
 
       const responseText = await apiResponse.text();
-      if (process.env.DEBUG === 'true') console.log(`API response body: ${responseText}`);
+      log.debug(`API response body: ${responseText}`);
 
       let json;
       try {
         json = JSON.parse(responseText);
       } catch (parseError) {
-        console.error(`Failed to parse API response: ${parseError}`);
+        log.error(`Failed to parse API response: ${parseError}`);
         json = { error: 'Failed to parse response', raw: responseText };
       }
 

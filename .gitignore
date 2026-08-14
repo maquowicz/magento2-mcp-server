@@ -1,6 +1,8 @@
 .clinerules/
 .vscode/
+.opencode/
 .data/
 package-lock.json
 node_modules/
 build/
+.env

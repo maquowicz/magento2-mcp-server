@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { URL } from 'url';
+import { log } from '../lib/logger.js';
 
 export function createListResourcesHandler() {
   return async (): Promise<any> => ({
@@ -9,7 +10,7 @@ export function createListResourcesHandler() {
         uri: 'magento://rest/schema',
         name: 'Magento REST API Schema (Searchable)',
         mimeType: "application/json",
-        description: "Full Magento REST API schema, or filtered subset via ?search=keyword (multi-word queries use OR logic across words for broader matches, case-insensitive) or ?search=/regex/ (regex, e.g., /customers/i). Searches all string fields (paths, descriptions, etc.) and returns full matching structures to preserve context. For exact paths, use regex with escaped slashes like /V1/eav\/attribute-options/i.",
+        description: "Full Magento REST API schema, or filtered subset via ?search=keyword (multi-word queries use OR logic across words for broader matches, case-insensitive) or ?search=/regex/ (regex, e.g., /customers/i). Searches all string fields (paths, descriptions, etc.) and returns full matching structures to preserve context. For exact paths, use regex with escaped slashes like \\/V1\\/eav\\/attribute-options/i.",
       }
     ]
   });
@@ -26,7 +27,7 @@ export function createReadResourceHandler(url: string, getToken: () => Promise<s
       const cacheDir = path.join(__dirname, '../..', '.data', 'cache');
       const cacheFile = path.join(cacheDir, 'schema.json');
 
-      console.log('Cache directory:', cacheDir);
+      log.debug('Cache directory:', cacheDir);
 
       await fs.mkdir(cacheDir, { recursive: true });
 
@@ -36,13 +37,13 @@ export function createReadResourceHandler(url: string, getToken: () => Promise<s
         await fs.access(cacheFile);
         const cachedData = JSON.parse(await fs.readFile(cacheFile, 'utf8'));
         const now = Date.now();
-        if (!('timestamp' in cachedData) || now - cachedData.timestamp > 3600000) { // 1 hour in ms
+        if (!('timestamp' in cachedData) || now - cachedData.timestamp > 3600000) {
           throw new Error('Cache expired or invalid format');
         }
-        console.log('Schema loaded from cache at:', cacheFile);
+        log.debug('Schema loaded from cache at:', cacheFile);
         schemaJson = cachedData.schema;
       } catch {
-        console.log('Fetching schema from API');
+        log.debug('Fetching schema from API');
         const token = await getToken();
         const response = await fetch(`${url}/rest/all/schema?services=all`, {
           headers: {
@@ -53,12 +54,12 @@ export function createReadResourceHandler(url: string, getToken: () => Promise<s
         schemaJson = await response.json();
         const cacheData = { schema: schemaJson, timestamp: Date.now() };
         await fs.writeFile(cacheFile, JSON.stringify(cacheData, null, 2));
-        console.log('Schema cached to file');
+        log.debug('Schema cached to file');
       }
 
       let text: string;
       if (searchQuery) {
-        console.log('Schema search query:', searchQuery);
+        log.debug('Schema search query:', searchQuery);
         const filteredJson = searchSchema(schemaJson, searchQuery);
         text = JSON.stringify(filteredJson || {}, null, 2);
       } else {
@@ -102,7 +103,7 @@ function searchSchema(schema: any, query: string): any {
           regex = new RegExp(pattern, flags);
           isRegex = true;
         } catch (e) {
-          console.log('Invalid regex:', e);
+          log.debug('Invalid regex:', e);
           return {};
         }
       } else {
