@@ -102,6 +102,7 @@ function createGetToken(url: string, initialToken?: string): () => Promise<strin
 async function main(): Promise<void> {
   try {
     log.info(`Env profile: ${process.env.M2_API_MCP_ENV_PROFILE || 'default'}`);
+    log.info(`CWD: ${process.cwd()}`);
     const [url, token] = process.argv.slice(2);
     const magentoUrl = url || resolveEnvValue(process.env.M2_API_MCP_MAGENTO_URL);
 

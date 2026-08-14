@@ -43,7 +43,7 @@ The server loads `.env` automatically from the current working directory (CWD) a
 
 #### Per-profile `.env` files
 
-To let different MCP agents use different configurations, set `M2_API_MCP_ENV_PROFILE` in the agent's `env`/`environment` block. The server then loads `.env.<profile>` from CWD instead of `.env`:
+To let different MCP agents use different configurations, set `M2_API_MCP_ENV_PROFILE` in the agent's env block. The server then loads `.env.<profile>` from CWD instead of `.env`:
 
 ```json
 {
@@ -55,13 +55,29 @@ To let different MCP agents use different configurations, set `M2_API_MCP_ENV_PR
 
 This loads `.env.test`. With no profile set, the server loads `.env` (backward compatible).
 
+> **Client key name varies**: opencode uses `environment`; Roo Code / Zoo Code use `env` and also accept `cwd` to point at the directory containing `.env.<profile>`:
+>
+> ```json
+> {
+>   "command": "node",
+>   "args": ["/path/to/build/index.js"],
+>   "cwd": "/path/to/project",
+>   "env": {
+>     "M2_API_MCP_ENV_PROFILE": "test",
+>     "M2_API_MCP_MAGENTO_URL": "{env:M2_API_MCP_MAGENTO_URL}",
+>     "M2_API_MCP_ADMIN_USERNAME": "{env:M2_API_MCP_ADMIN_USERNAME}",
+>     "M2_API_MCP_ADMIN_PASSWORD": "{env:M2_API_MCP_ADMIN_PASSWORD}"
+>   }
+> }
+> ```
+
 Precedence (highest to lowest):
 
 1. Real values already in `process.env` (set by the shell or MCP client as a literal value).
 2. Values from `.env.<profile>` (or `.env` when no profile is set).
 3. Unresolved `{env:VAR}` placeholders — replaced by the env-file value when present, otherwise `resolveEnvValue` throws a clear error.
 
-Profile names must start with a letter or number and contain only letters, numbers, dot, dash, or underscore. A missing `.env.<profile>` file is a startup error so a typo fails loudly instead of silently loading the wrong configuration.
+Profile names must start with a letter or number and contain only letters, numbers, dot, dash, or underscore. A missing `.env.<profile>` file is a startup error **unless** the MCP client/shell already supplied real values for `M2_API_MCP_MAGENTO_URL`, `M2_API_MCP_ADMIN_USERNAME`, and `M2_API_MCP_ADMIN_PASSWORD` — in that case the server warns and continues using those values.
 
 ### Starting the Server
 

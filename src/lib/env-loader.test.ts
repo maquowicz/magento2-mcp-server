@@ -60,12 +60,40 @@ describe('loadEnv', () => {
     expect(() => loadEnv()).toThrow('file not found');
   });
 
-  it('replaces unresolved {env:VAR} placeholders with file values', () => {
-    fs.writeFileSync(path.join(tmpDir!, '.env'), 'FOO=from-file\n');
-    setEnv({ FOO: '{env:FOO}' });
-    loadEnv();
-    expect(process.env.FOO).toBe('from-file');
+  it('continues without the profile file when required credentials are already present', () => {
+    setEnv({
+      M2_API_MCP_ENV_PROFILE: 'missing',
+      M2_API_MCP_MAGENTO_URL: 'https://example.com',
+      M2_API_MCP_ADMIN_USERNAME: 'admin',
+      M2_API_MCP_ADMIN_PASSWORD: 'secret',
+    });
+
+    expect(() => loadEnv()).not.toThrow();
+    expect(process.env.M2_API_MCP_MAGENTO_URL).toBe('https://example.com');
   });
+
+  it('still throws when the profile file is missing and required credentials are incomplete', () => {
+    setEnv({
+      M2_API_MCP_ENV_PROFILE: 'missing',
+      M2_API_MCP_MAGENTO_URL: 'https://example.com',
+    });
+
+    expect(() => loadEnv()).toThrow('file not found');
+  });
+it('replaces unresolved {env:VAR} placeholders with file values', () => {
+  fs.writeFileSync(path.join(tmpDir!, '.env'), 'FOO=from-file\n');
+  setEnv({ FOO: '{env:FOO}' });
+  loadEnv();
+  expect(process.env.FOO).toBe('from-file');
+});
+
+it('replaces empty client-supplied values with file values', () => {
+  fs.writeFileSync(path.join(tmpDir!, '.env'), 'FOO=from-file\n');
+  setEnv({ FOO: '' });
+  loadEnv();
+  expect(process.env.FOO).toBe('from-file');
+});
+
 
   it('does not override real values already present in process.env', () => {
     fs.writeFileSync(path.join(tmpDir!, '.env'), 'FOO=from-file\n');

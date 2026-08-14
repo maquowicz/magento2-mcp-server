@@ -6,6 +6,8 @@ package-lock.json
 node_modules/
 build/
 .env
+.env.*
+!.env.example
 .roo/
 coverage/
 plans/
