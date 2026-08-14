@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './lib/env-bootstrap.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ListResourcesRequestSchema, ReadResourceRequestSchema, ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -101,8 +101,9 @@ function createGetToken(url: string, initialToken?: string): () => Promise<strin
 
 async function main(): Promise<void> {
   try {
+    log.info(`Env profile: ${process.env.M2_API_MCP_ENV_PROFILE || 'default'}`);
     const [url, token] = process.argv.slice(2);
-    const magentoUrl = url || process.env.M2_API_MCP_MAGENTO_URL;
+    const magentoUrl = url || resolveEnvValue(process.env.M2_API_MCP_MAGENTO_URL);
 
     if (!magentoUrl) {
       throw new Error('Magento URL is required (pass as CLI arg or set M2_API_MCP_MAGENTO_URL env var)');

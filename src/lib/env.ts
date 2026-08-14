@@ -15,14 +15,14 @@ export function resolveEnvValue(value: string | undefined): string | undefined {
     if (resolved === undefined) {
       throw new Error(
         `Environment variable "${envName}" referenced as "{env:${envName}}" is not set. ` +
-        `Set it in your shell (export ${envName}=...) or in a .env file at the project root.`
+        `Set it in your shell (export ${envName}=...), in a .env file at the project root, or in a .env.<profile> file when M2_API_MCP_ENV_PROFILE is set.`
       );
     }
     if (/^\{env:[A-Za-z_][A-Za-z0-9_]*\}$/.test(resolved)) {
       throw new Error(
         `Circular {env:...} reference: "{env:${envName}}" resolved to "${resolved}". ` +
         `The underlying environment variable "${envName}" is not set. ` +
-        `Set it in your shell (export ${envName}=...) or in a .env file at the project root.`
+        `Set it in your shell (export ${envName}=...), in a .env file at the project root, or in a .env.<profile> file when M2_API_MCP_ENV_PROFILE is set.`
       );
     }
     return resolved;

@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node build/index.js",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "build": "tsc && chmod 755 build/index.js",
+    "build": "tsc -p tsconfig.build.json && chmod 755 build/index.js",
     "test": "jest",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"src/**/*.ts\""

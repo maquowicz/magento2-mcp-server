@@ -30,7 +30,7 @@ npm install @maquowicz/magento2-mcp-server
 
 ### Environment Variables via `.env` File
 
-Create a `.env` file in your **project root** (the directory where opencode runs, i.e. where your `opencode.json` lives). Copy from `.env.example` included with this package:
+Create a `.env` file in your **project root** (the directory where your MCP client runs, i.e. where your `opencode.json` or `.roo/mcp.json` lives). Copy from `.env.example` included with this package:
 
 ```bash
 M2_API_MCP_MAGENTO_URL=https://your-magento-store.com
@@ -39,7 +39,29 @@ M2_API_MCP_ADMIN_PASSWORD=your_password
 M2_API_MCP_DEBUG=false
 ```
 
-The server loads `.env` automatically from the current working directory (CWD) at startup via `dotenv`. When launched by opencode, CWD is the workspace/project directory. Environment variables set by the MCP client or shell take precedence over `.env` values.
+The server loads `.env` automatically from the current working directory (CWD) at startup via `dotenv`. When launched by an MCP client, CWD is the workspace/project directory. Environment variables set by the MCP client or shell take precedence over `.env` values.
+
+#### Per-profile `.env` files
+
+To let different MCP agents use different configurations, set `M2_API_MCP_ENV_PROFILE` in the agent's `env`/`environment` block. The server then loads `.env.<profile>` from CWD instead of `.env`:
+
+```json
+{
+  "environment": {
+    "M2_API_MCP_ENV_PROFILE": "test"
+  }
+}
+```
+
+This loads `.env.test`. With no profile set, the server loads `.env` (backward compatible).
+
+Precedence (highest to lowest):
+
+1. Real values already in `process.env` (set by the shell or MCP client as a literal value).
+2. Values from `.env.<profile>` (or `.env` when no profile is set).
+3. Unresolved `{env:VAR}` placeholders — replaced by the env-file value when present, otherwise `resolveEnvValue` throws a clear error.
+
+Profile names must start with a letter or number and contain only letters, numbers, dot, dash, or underscore. A missing `.env.<profile>` file is a startup error so a typo fails loudly instead of silently loading the wrong configuration.
 
 ### Starting the Server
 
@@ -114,7 +136,7 @@ To use this server with your MCP client (like Cline, Cursor, or opencode), add t
 }
 ```
 
-> **How `{env:VAR}` works with opencode**: opencode resolves `{env:VAR}` from the shell environment when loading config. For this to work, the env var must be set in your shell. The simplest approach is to create a `.env` file at your project root (where `opencode.json` lives). The server loads it automatically via `dotenv` — no shell config needed. If opencode passes the literal `{env:...}` string (because the var isn't in the shell), the server's fallback resolver catches it and throws a clear error explaining what's missing.
+> **How `{env:VAR}` works with opencode**: opencode resolves `{env:VAR}` from the shell environment when loading config. For this to work, the env var must be set in your shell. The simplest approach is to create a `.env` file (or a `.env.<profile>` file when `M2_API_MCP_ENV_PROFILE` is set) at your project root. The server loads it automatically — no shell config needed. If opencode passes the literal `{env:...}` string (because the var isn't in the shell), the server replaces it with the matching env-file value when present; otherwise it throws a clear error explaining what's missing.
 
 **Static mode:**
 
@@ -132,6 +154,42 @@ To use this server with your MCP client (like Cline, Cursor, or opencode), add t
         "your-admin-api-token"
       ]
     }
+  }
+}
+```
+
+#### Multiple agents with different profiles
+
+Example: opencode uses a test store and Roo uses a production store.
+
+`.env.test`:
+```bash
+M2_API_MCP_MAGENTO_URL=https://test.example.com
+M2_API_MCP_ADMIN_USERNAME=admin@test.example.com
+M2_API_MCP_ADMIN_PASSWORD=test_password
+```
+
+`.env.prod`:
+```bash
+M2_API_MCP_MAGENTO_URL=https://www.example.com
+M2_API_MCP_ADMIN_USERNAME=admin@example.com
+M2_API_MCP_ADMIN_PASSWORD=prod_password
+```
+
+`opencode.json` (`mcp.api.environment`):
+```json
+{
+  "environment": {
+    "M2_API_MCP_ENV_PROFILE": "test"
+  }
+}
+```
+
+`.roo/mcp.json` (`mcpServers.api.environment`):
+```json
+{
+  "environment": {
+    "M2_API_MCP_ENV_PROFILE": "prod"
   }
 }
 ```
@@ -202,7 +260,7 @@ In dynamic mode, the server decodes the JWT token to check expiration and refres
 ## Security
 
 - Never commit your Magento admin token or credentials
-- The `.env` file is gitignored — use `.env.example` as a template
+- The `.env` and `.env.<profile>` files are gitignored — use `.env.example` as a template
 - Use environment variables for all sensitive configuration (M2_API_MCP_MAGENTO_URL, M2_API_MCP_ADMIN_USERNAME, M2_API_MCP_ADMIN_PASSWORD)
 - The server uses insecure HTTPS connections (rejectUnauthorized: false) for self-signed certs; ensure your production setup is secure
 - Keep your Node.js and npm versions up to date
@@ -348,12 +406,14 @@ This will allow you to set breakpoints, inspect variables, and step through the 
 - **Authorization Fix**: Resolved issue with extra quotes in Bearer token header.
 - **Conditional Logging**: All debug logs are toggled via M2_API_MCP_DEBUG env var. INFO/WARN/ERROR always logged.
 - **File-based Logging**: All output written to `.data/logs/magento-mcp.log` relative to the project root. Stderr also used.
-- **`.env` Support**: Credentials and URL loaded from `.env` at the project root (CWD) via dotenv.
+- **`.env` Support**: Credentials and URL loaded from `.env` at the project root (CWD), or from `.env.<profile>` when `M2_API_MCP_ENV_PROFILE` is set.
+- **Per-profile `.env`**: Set `M2_API_MCP_ENV_PROFILE` to load `.env.<profile>` for per-agent configurations.
 - **`{env:...}` Resolution**: Server resolves `{env:VAR}` patterns as a fallback with circular-loop detection.
 - **MCP Integration**: Tested with Cline and opencode; supports stdio transport for tools like magento_rest_api.
 - **Schema Caching**: File-based caching for REST API schema in .data/cache/schema.json with 1-hour expiration.
 
 - **Version 0.0.5**: Added `.env` support, `{env:...}` pattern resolution, file-based logging, fail-fast startup auth, and M2_API_MCP_* env var naming convention.
+- **Version 0.0.6**: Added `M2_API_MCP_ENV_PROFILE` for loading `.env.<profile>` per MCP agent.
 
 ## License
 
