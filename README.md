@@ -204,23 +204,51 @@ This will enable the following capabilities:
 
 ### magento_rest_api
 
-Makes REST API calls to your Magento instance.
+Makes REST API calls to your Magento instance. Discover exact endpoints and field
+names via the `magento://rest/schema` resource (add `?search=` to filter).
 
 Parameters:
-- `path`: API endpoint path
-- `method`: HTTP method (GET, POST, PUT, DELETE)
-- `body`: Request body (JSON string)
-- `query`: Query parameters
+- `path`: REST API path starting with `/rest`, e.g. `/rest/V1/products`,
+  `/rest/V1/products/{sku}`, `/rest/V1/orders`, `/rest/V1/customers/search`,
+  `/rest/V1/cmsPage/search`, `/rest/V1/cmsBlock/search`, `/rest/V1/categories/list`,
+  `/rest/V1/products/attributes`, `/rest/V1/store/storeConfigs`, `/rest/V1/search`.
+- `method`: HTTP method — `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`.
+  GET/HEAD for reads (no body); POST=create, PUT=update, PATCH=partial update,
+  DELETE=remove (JSON body required).
+- `body`: JSON request body string. Required for POST/PUT/PATCH/DELETE; use `""` for GET/HEAD.
+- `query`: URL-encoded query string (leading `?` optional; omit for no params).
 
 Example usage in MCP client:
 ```typescript
 const response = await mcp.magento_rest_api({
-  path: "rest/V1/orders",
+  path: "/rest/V1/products",
   method: "GET",
   body: "",
-  query: "searchCriteria[pageSize]=3&searchCriteria[currentPage]=1"
+  query: "searchCriteria[pageSize]=5&searchCriteria[currentPage]=1&fields=items[sku,name,price]&searchCriteria[filterGroups][0][filters][0][field]=status&searchCriteria[filterGroups][0][filters][0][value]=1&searchCriteria[filterGroups][0][filters][0][conditionType]=eq"
 });
 ```
+
+#### searchCriteria cheat-sheet
+
+- **Pagination** — `searchCriteria[pageSize]=N&searchCriteria[currentPage]=1`
+- **Sorting** — `searchCriteria[sortOrders][0][field]=entity_id&searchCriteria[sortOrders][0][direction]=DESC` (ASC|DESC)
+- **Field projection** — `fields=items[sku,name,price]`; add `total_count,search_criteria` to include them; custom attributes require `fields=items[sku,name,custom_attributes]`
+- **Filter shape** — `searchCriteria[filterGroups][G][filters][F][field]=...&searchCriteria[filterGroups][G][filters][F][value]=...&searchCriteria[filterGroups][G][filters][F][conditionType]=...`
+  - **AND** = separate `filterGroups` (`G=0,1,...`)
+  - **OR** = multiple `filters` within the same `filterGroups` entry (`F=0,1,...`)
+- **conditionType values**
+  | Type | Notes |
+  |---|---|
+  | `eq` | exact match (sku, status, category_id, custom attrs, dates) |
+  | `like` | substring; URL-encode `%` as `%25` → `value=%25kolagen%25` = LIKE `%kolagen%` |
+  | `in` | comma-separated values, e.g. `fm-oil-om3,biol-omega,ah-omega` |
+  | `gt` / `gteq` / `lt` / `lteq` | numbers and dates (`created_at` compared to `2026-08-01`) |
+  | `notnull` | value ignored |
+  | `finset` | multiselect attrs; avoid with `category_id` (SQL cardinality error in some builds) |
+  | `from` / `to` | ignored for `price` range; use `gteq`+`lteq` across two filter groups instead |
+- **Category filter** — `field=category_id&conditionType=eq` (do NOT use `finset`)
+- **Price/date range** — two filter groups: `[0] price gteq 100` + `[1] price lteq 200`
+- **Full-text search** — `GET /rest/V1/search?searchCriteria[requestName]=quick_search_container&searchCriteria[filterGroups][0][filters][0][field]=search_term&searchCriteria[filterGroups][0][filters][0][value]=kolagen&searchCriteria[filterGroups][0][filters][0][conditionType]=eq` (items return only ids; resolve via `/rest/V1/products`)
 
 ## Available Resources
 

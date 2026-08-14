@@ -5,25 +5,44 @@ export function createListToolsHandler() {
   return async (): Promise<any> => ({
     tools: [{
       name: 'magento_rest_api',
-      description: 'Run Magento REST API request',
+      description: [
+        'Run a Magento 2 REST API request against the configured store.',
+        'Discover exact endpoints and field names via the magento://rest/schema resource (add ?search= to filter).',
+        'Reads (GET/HEAD) are safe on any endpoint; writes (POST/PUT/PATCH/DELETE) require a JSON body.'
+      ].join(' '),
       inputSchema: {
         type: 'object',
         properties: {
           path: {
             type: 'string',
-            description: 'REST API path to call starting with /rest',
+            description: [
+              'REST API path starting with /rest, e.g. /rest/V1/products, /rest/V1/products/{sku},',
+              '/rest/V1/orders, /rest/V1/customers/search, /rest/V1/cmsPage/search, /rest/V1/cmsBlock/search,',
+              '/rest/V1/categories/list, /rest/V1/products/attributes, /rest/V1/store/storeConfigs, /rest/V1/search.'
+            ].join(' ')
           },
           method: {
             type: 'string',
-            description: 'HTTP method to use',
+            enum: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
+            description: 'HTTP method. GET/HEAD for reads (no body). POST=create, PUT=update, PATCH=partial update, DELETE=remove (JSON body required).'
           },
           body: {
             type: 'string',
-            description: 'JSON body to send with the request',
+            description: 'JSON request body string. Required for POST/PUT/PATCH/DELETE; use empty string "" for GET/HEAD.'
           },
           query: {
             type: 'string',
-            description: 'Query parameters to send with the request starting with ?',
+            description: [
+              'URL-encoded query string (leading ? optional; omit for no params). Magento list endpoints accept searchCriteria:',
+              'Pagination: searchCriteria[pageSize]=N&searchCriteria[currentPage]=1',
+              'Sorting: searchCriteria[sortOrders][0][field]=entity_id&searchCriteria[sortOrders][0][direction]=DESC (ASC|DESC)',
+              'Field projection: fields=items[sku,name,price] (add total_count,search_criteria to include them; custom attrs require custom_attributes)',
+              'Filters: searchCriteria[filterGroups][G][filters][F][field]=...&[value]=...&[conditionType]=...',
+              '  AND = separate filterGroups (G=0,1,...); OR = multiple filters within one group (F=0,1,...).',
+              'conditionType: eq, neq, like, in, nin, gt, gteq, lt, lteq, notnull, null, finset. URL-encode % as %25 and space as %20 (value=%25kolagen%25 = LIKE %kolagen%).',
+              'Category filter: field=category_id&conditionType=eq (do NOT use finset). Price/date range: two filterGroups gteq + lteq (from/to ignored for price).',
+              'Full-text: GET /rest/V1/search with searchCriteria[requestName]=quick_search_container and filter field=search_term&value=<term>&conditionType=eq (items return only ids).'
+            ].join(' ')
           },
         },
         required: ['path', 'method', 'body', 'query']
