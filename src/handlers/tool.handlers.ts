@@ -56,37 +56,56 @@ export function createCallToolHandler(url: string, getToken: () => Promise<strin
     if (request.params.name === 'magento_rest_api') {
       const { path, method, body, query } = request.params.arguments;
 
-      log.debug(`Making API call: ${method} ${url}${path}${query}`);
-      log.debug(`Body: ${body || 'none'}`);
+      // Capture exactly what the client sent (e.g. opencode's body handling
+      // quirks) before any transformation.
+      log.debug(`Incoming tool args: ${JSON.stringify(request.params.arguments)}`);
 
-      const token = await getToken();
-      log.debug(`Using token: ${token}`);
-
+      const startedAt = Date.now();
       const fullUrl = `${url}${path}${query ? (query.startsWith('?') ? query : '?' + query) : ''}`;
+      log.info(`API call: ${method} ${path}${query ? '?' + query : ''}`);
+      log.debug(`Body: ${body || 'none'}`);
+      log.debug(`Full URL: ${fullUrl}`);
+
+      let token: string;
+      try {
+        token = await getToken();
+      } catch (error) {
+        log.error(`Token retrieval failed for ${method} ${path}: ${error instanceof Error ? error.message : error}`);
+        throw error;
+      }
+      log.debug(`Using token: ${token.slice(0, 8)}... (${token.length} chars)`);
+
       const requestHeaders = {
-        ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}),
+        ...(method !== 'GET' && method !== 'HEAD' ? { 'Content-Type': 'application/json' } : {}),
         'Accept': 'application/json',
         'Authorization': `Bearer ${token}`.replace(/"/g, '')
       };
-      log.debug(`Request URL: ${fullUrl}`);
-      log.debug(`Request method: ${method}`);
-      log.debug(`Authorization header value: ${requestHeaders.Authorization}`);
-      log.debug(`Request headers: ${JSON.stringify(requestHeaders, null, 2)}`);
+      log.debug(`Request headers: ${JSON.stringify(requestHeaders)}`);
 
       const dispatcher = new Agent({
         connect: {
           rejectUnauthorized: false,
         }
       });
-      const apiResponse = await fetch(fullUrl, {
-        method,
-        body: body || undefined,
-        headers: requestHeaders,
-        dispatcher
-      });
 
-      log.debug(`API response status: ${apiResponse.status} ${apiResponse.statusText}`);
-      log.debug(`API response headers: ${JSON.stringify(Object.fromEntries(apiResponse.headers.entries()), null, 2)}`);
+      let apiResponse: Awaited<ReturnType<typeof fetch>>;
+      try {
+        apiResponse = await fetch(fullUrl, {
+          method,
+          // GET/HEAD never carry a request body; drop it regardless of what the
+          // client sent (some clients forward a truthy body for GET/HEAD).
+          body: method === 'GET' || method === 'HEAD' ? undefined : body || undefined,
+          headers: requestHeaders,
+          dispatcher
+        });
+      } catch (error) {
+        log.error(`Request failed for ${method} ${path}: ${error instanceof Error ? error.message : error}`);
+        throw error;
+      }
+
+      const duration = Date.now() - startedAt;
+      log.info(`API response: ${method} ${path} => ${apiResponse.status} ${apiResponse.statusText} (${duration}ms)`);
+      log.debug(`API response headers: ${JSON.stringify(Object.fromEntries(apiResponse.headers.entries()))}`);
 
       const responseText = await apiResponse.text();
       log.debug(`API response body: ${responseText}`);

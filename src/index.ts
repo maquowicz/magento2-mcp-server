@@ -45,7 +45,7 @@ async function fetchToken(url: string, username: string, password: string): Prom
 
   const text = await response.text();
   const token = text.trim();
-  log.debug(`Token fetched successfully: ${token}`);
+  log.debug(`Token fetched successfully: ${token.slice(0, 8)}... (${token.length} chars)`);
   const expiration = await decodeJWT(token);
   log.debug(`Token expiration: ${new Date(expiration).toISOString()}`);
   return { token, expiration };
@@ -123,7 +123,7 @@ async function main(): Promise<void> {
     const getToken = createGetToken(normalizedUrl, token);
 
     const startupToken = await getToken();
-    log.debug(`Startup token fetched successfully: ${startupToken}`);
+    log.debug(`Startup token fetched successfully: ${startupToken.slice(0, 8)}... (${startupToken.length} chars)`);
 
     const server = new Server(
       {

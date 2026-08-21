@@ -36,7 +36,7 @@ Create a `.env` file in your **project root** (the directory where your MCP clie
 M2_API_MCP_MAGENTO_URL=https://your-magento-store.com
 M2_API_MCP_ADMIN_USERNAME=admin@example.com
 M2_API_MCP_ADMIN_PASSWORD=your_password
-M2_API_MCP_DEBUG=false
+M2_API_MCP_LOG_LEVEL=info
 ```
 
 The server loads `.env` automatically from the current working directory (CWD) at startup via `dotenv`. When launched by an MCP client, CWD is the workspace/project directory. Environment variables set by the MCP client or shell take precedence over `.env` values.
@@ -320,7 +320,7 @@ When the server starts, it writes logs to:
 .data/logs/magento-mcp.log
 ```
 
-This file is created automatically. All server output (info, warnings, errors, debug messages) is written here. By default only `INFO`, `WARN`, and `ERROR` messages are logged. Set `M2_API_MCP_DEBUG=true` to get full verbose logging including token values, request/response headers, and API call details.
+This file is created automatically. All server output (info, warnings, errors, debug messages) is written here. The verbosity is controlled by `M2_API_MCP_LOG_LEVEL` (`debug|info|warn|error`, default `info`): at `info` every API call is logged as `API call: METHOD /rest/...` and `API response: METHOD /rest/... => STATUS (Nms)`; at `debug` full request/response headers, bodies, and token lifecycle are included. Set `M2_API_MCP_LOG_LEVEL=debug` (or the legacy `M2_API_MCP_DEBUG=true`) for verbose troubleshooting. The level is read once at startup — restart the server to change it. Secrets (bearer tokens, `Authorization` headers, JWT-like strings) are redacted from logs automatically.
 
 ### Console Output
 
@@ -330,7 +330,7 @@ Since the server uses **stdio transport** to communicate with MCP clients:
 
 **To see live logs**, run the server manually from the terminal:
 ```bash
-M2_API_MCP_DEBUG=true M2_API_MCP_MAGENTO_URL="https://your-magento-store.com" M2_API_MCP_ADMIN_USERNAME="admin@example.com" M2_API_MCP_ADMIN_PASSWORD="your_password" node build/index.js
+M2_API_MCP_LOG_LEVEL=debug M2_API_MCP_MAGENTO_URL="https://your-magento-store.com" M2_API_MCP_ADMIN_USERNAME="admin@example.com" M2_API_MCP_ADMIN_PASSWORD="your_password" node build/index.js
 ```
 All output goes to stderr in the terminal.
 
@@ -356,31 +356,31 @@ M2_API_MCP_LOG_DIR=/tmp/magento-logs node build/index.js https://your-store.com
 
 ## Debugging
 
-To enable verbose logging for troubleshooting authentication, token refresh, and API calls, set `M2_API_MCP_DEBUG=true`. This enables detailed debug output in both the log file and stderr.
+To enable verbose logging for troubleshooting authentication, token refresh, and API calls, set `M2_API_MCP_LOG_LEVEL=debug`. This enables detailed debug output in both the log file and stderr.
 
 Example in dynamic mode:
 ```bash
-M2_API_MCP_DEBUG=true M2_API_MCP_MAGENTO_URL="https://your-magento-store.com" M2_API_MCP_ADMIN_USERNAME="your_admin_username" M2_API_MCP_ADMIN_PASSWORD="your_admin_password" node build/index.js
+M2_API_MCP_LOG_LEVEL=debug M2_API_MCP_MAGENTO_URL="https://your-magento-store.com" M2_API_MCP_ADMIN_USERNAME="your_admin_username" M2_API_MCP_ADMIN_PASSWORD="your_admin_password" node build/index.js
 ```
 
 In the MCP client config, add it to the env:
 ```json
 "env": {
-  "M2_API_MCP_DEBUG": "true",
+  "M2_API_MCP_LOG_LEVEL": "debug",
   "M2_API_MCP_ADMIN_USERNAME": "your_admin_username",
   "M2_API_MCP_ADMIN_PASSWORD": "your_admin_password"
 }
 ```
 
-Logs will include token fetch details, request/response headers, and expiration checks. Set `M2_API_MCP_DEBUG=false` or omit it for production to reduce output.
+Logs will include token fetch details, request/response headers, and expiration checks. Use `M2_API_MCP_LOG_LEVEL=info` or omit it for production to reduce output.
 
-> **Warning**: With `M2_API_MCP_DEBUG=true`, full token values and API response bodies are logged. Do not share log files from debug sessions.
+> **Note**: Secrets are redacted automatically — bearer tokens and `Authorization` headers are scrubbed, and JWT-like strings are replaced with `<jwt-redacted>`. Raw tokens are never written to the log.
 
 ### Troubleshooting Connection Issues
 
 If the server fails to connect to Magento:
 
-1. **Enable debug logging**: Set `M2_API_MCP_DEBUG=true` and check `.data/logs/magento-mcp.log`
+1. **Enable debug logging**: Set `M2_API_MCP_LOG_LEVEL=debug` and check `.data/logs/magento-mcp.log`
 2. **Run the server manually** from a terminal to see live output
 3. **Verify credentials**: Run `echo $M2_API_MCP_ADMIN_USERNAME` and `echo $M2_API_MCP_ADMIN_PASSWORD` in the same environment where the MCP client runs
 4. **Test the token endpoint directly**:
@@ -448,7 +448,8 @@ This will allow you to set breakpoints, inspect variables, and step through the 
 
 - **Dynamic Token Management**: Fully functional with automatic fetch and refresh using admin credentials.
 - **Authorization Fix**: Resolved issue with extra quotes in Bearer token header.
-- **Conditional Logging**: All debug logs are toggled via M2_API_MCP_DEBUG env var. INFO/WARN/ERROR always logged.
+- **Level-based Logging**: `M2_API_MCP_LOG_LEVEL` (`debug|info|warn|error`, default `info`) controls verbosity; the legacy `M2_API_MCP_DEBUG=true` still maps to debug. Every API call is logged at info with status + timing.
+- **Secret Redaction**: Bearer tokens, `Authorization` headers, and JWT-like strings are scrubbed from all logs; tokens are never logged in full.
 - **File-based Logging**: All output written to `.data/logs/magento-mcp.log` relative to the project root. Stderr also used.
 - **`.env` Support**: Credentials and URL loaded from `.env` at the project root (CWD), or from `.env.<profile>` when `M2_API_MCP_ENV_PROFILE` is set.
 - **Per-profile `.env`**: Set `M2_API_MCP_ENV_PROFILE` to load `.env.<profile>` for per-agent configurations.
