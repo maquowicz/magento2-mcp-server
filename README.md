@@ -457,8 +457,10 @@ This will allow you to set breakpoints, inspect variables, and step through the 
 - **MCP Integration**: Tested with Cline and opencode; supports stdio transport for tools like magento_rest_api.
 - **Schema Caching**: File-based caching for REST API schema in .data/cache/schema.json with 1-hour expiration.
 
-- **Version 0.0.5**: Added `.env` support, `{env:...}` pattern resolution, file-based logging, fail-fast startup auth, and M2_API_MCP_* env var naming convention.
-- **Version 0.0.6**: Added `M2_API_MCP_ENV_PROFILE` for loading `.env.<profile>` per MCP agent.
+## Changelog
+
+- **0.0.4** — `.env` support, `{env:...}` pattern resolution, file-based logging, fail-fast startup auth, and `M2_API_MCP_*` env var naming.
+- **Unreleased** — per-agent `M2_API_MCP_ENV_PROFILE` (`.env.<profile>`), leveled logging (`M2_API_MCP_LOG_LEVEL`) with secret redaction, and GET/HEAD request-body handling.
 
 ## License
 

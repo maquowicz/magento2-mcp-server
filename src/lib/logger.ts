@@ -49,7 +49,7 @@ function redact(message: string): string {
     .replace(/("Authorization"\s*:\s*")[^"]+(")/gi, '$1<redacted>$2')
     .replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, '$1<redacted>')
     // JWT-like header.payload.signature; segment length guards keep hostnames
-    // like "www.spex4less.test" from being caught.
+    // like "www.example.com" from being caught.
     .replace(/[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{10,}/g, '<jwt-redacted>');
 }
 
