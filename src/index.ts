@@ -44,7 +44,10 @@ async function fetchToken(url: string, username: string, password: string): Prom
   }
 
   const text = await response.text();
-  const token = text.trim();
+  // Magento may return the token wrapped in JSON string quotes depending on
+  // content negotiation ("eyJ..." vs eyJ...). Strip them here once so every
+  // consumer (tools AND resources) gets a bare token.
+  const token = text.trim().replace(/"/g, '');
   log.debug(`Token fetched successfully: ${token.slice(0, 8)}... (${token.length} chars)`);
   const expiration = await decodeJWT(token);
   log.debug(`Token expiration: ${new Date(expiration).toISOString()}`);

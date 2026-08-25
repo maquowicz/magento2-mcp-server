@@ -1,5 +1,6 @@
 import { Agent, fetch } from 'undici';
 import { log } from '../lib/logger.js';
+import { coerceBooleans, containsBoolean, isTypeValidationError, parseJsonSafe } from '../lib/bool-coerce.js';
 
 export function createListToolsHandler() {
   return async (): Promise<any> => ({
@@ -28,7 +29,10 @@ export function createListToolsHandler() {
           },
           body: {
             type: 'string',
-            description: 'JSON request body string. Required for POST/PUT/PATCH/DELETE; use empty string "" for GET/HEAD.'
+            description: [
+              'JSON request body string. Required only for POST/PUT/PATCH/DELETE; omit or pass empty string "" for GET/HEAD.',
+              'Boolean-typed flags may be sent as true/false or 1/0 — if the endpoint expects ints (e.g. is_active), booleans are automatically retried as 1/0.'
+            ].join(' ')
           },
           query: {
             type: 'string',
@@ -45,7 +49,7 @@ export function createListToolsHandler() {
             ].join(' ')
           },
         },
-        required: ['path', 'method', 'body', 'query']
+        required: ['path', 'method']
       }
     }]
   });
@@ -54,7 +58,9 @@ export function createListToolsHandler() {
 export function createCallToolHandler(url: string, getToken: () => Promise<string>) {
   return async (request: any): Promise<any> => {
     if (request.params.name === 'magento_rest_api') {
-      const { path, method, body, query } = request.params.arguments;
+      const { path, method } = request.params.arguments;
+      const body: string = request.params.arguments.body ?? '';
+      const query: string = request.params.arguments.query ?? '';
 
       // Capture exactly what the client sent (e.g. opencode's body handling
       // quirks) before any transformation.
@@ -88,16 +94,18 @@ export function createCallToolHandler(url: string, getToken: () => Promise<strin
         }
       });
 
+      const doFetch = (requestBody?: string) => fetch(fullUrl, {
+        method,
+        // GET/HEAD never carry a request body; drop it regardless of what the
+        // client sent (some clients forward a truthy body for GET/HEAD).
+        body: method === 'GET' || method === 'HEAD' ? undefined : requestBody || undefined,
+        headers: requestHeaders,
+        dispatcher
+      });
+
       let apiResponse: Awaited<ReturnType<typeof fetch>>;
       try {
-        apiResponse = await fetch(fullUrl, {
-          method,
-          // GET/HEAD never carry a request body; drop it regardless of what the
-          // client sent (some clients forward a truthy body for GET/HEAD).
-          body: method === 'GET' || method === 'HEAD' ? undefined : body || undefined,
-          headers: requestHeaders,
-          dispatcher
-        });
+        apiResponse = await doFetch(body);
       } catch (error) {
         log.error(`Request failed for ${method} ${path}: ${error instanceof Error ? error.message : error}`);
         throw error;
@@ -107,7 +115,30 @@ export function createCallToolHandler(url: string, getToken: () => Promise<strin
       log.info(`API response: ${method} ${path} => ${apiResponse.status} ${apiResponse.statusText} (${duration}ms)`);
       log.debug(`API response headers: ${JSON.stringify(Object.fromEntries(apiResponse.headers.entries()))}`);
 
-      const responseText = await apiResponse.text();
+      let responseText = await apiResponse.text();
+
+      // LLM clients often send JSON booleans (true/false) for int-typed flags
+      // (e.g. is_active, status). Magento's TypeProcessor rejects those with a
+      // type-validation error. Retry once with all booleans coerced to 1/0 so
+      // both input styles work without breaking endpoints that expect real booleans.
+      if (
+        !apiResponse.ok &&
+        method !== 'GET' && method !== 'HEAD' && body &&
+        isTypeValidationError(apiResponse.status, responseText)
+      ) {
+        const parsed = parseJsonSafe(body);
+        if (parsed !== undefined && containsBoolean(parsed)) {
+          const coercedBody = JSON.stringify(coerceBooleans(parsed));
+          log.info(`Retrying ${method} ${path} with booleans coerced to 1/0`);
+          try {
+            apiResponse = await doFetch(coercedBody);
+            responseText = await apiResponse.text();
+            log.info(`Retry response: ${method} ${path} => ${apiResponse.status} ${apiResponse.statusText}`);
+          } catch (error) {
+            log.error(`Retry request failed for ${method} ${path}: ${error instanceof Error ? error.message : error}`);
+          }
+        }
+      }
       log.debug(`API response body: ${responseText}`);
 
       let json;

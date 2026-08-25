@@ -45,8 +45,12 @@ export function createReadResourceHandler(url: string, getToken: () => Promise<s
       } catch {
         log.debug('Fetching schema from API');
         const token = await getToken();
-        const response = await fetch(`${url}/rest/all/schema?services=all`, {
+        // The Accept header is REQUIRED: Magento returns only anonymous-area
+        // services (~50 paths) unless the schema request sends
+        // "Accept: application/json" (undici's default */* triggers that).
+        const response = await fetch(`${url}/rest/all/schema`, {
           headers: {
+            'Accept': 'application/json',
             'Authorization': `Bearer ${token}`
           }
         });
