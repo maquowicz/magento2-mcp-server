@@ -459,8 +459,7 @@ This will allow you to set breakpoints, inspect variables, and step through the 
 
 ## Changelog
 
-- **0.0.4** — `.env` support, `{env:...}` pattern resolution, file-based logging, fail-fast startup auth, and `M2_API_MCP_*` env var naming.
-- **Unreleased** — per-agent `M2_API_MCP_ENV_PROFILE` (`.env.<profile>`), leveled logging (`M2_API_MCP_LOG_LEVEL`) with secret redaction, and GET/HEAD request-body handling.
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
