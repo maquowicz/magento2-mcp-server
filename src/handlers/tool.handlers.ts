@@ -1,6 +1,20 @@
 import { Agent, fetch } from 'undici';
 import { log } from '../lib/logger.js';
 import { coerceBooleans, containsBoolean, isTypeValidationError, parseJsonSafe } from '../lib/bool-coerce.js';
+import { ApiRequestError, ClassifiedApiError, classifyHttpResponse, classifyTransportError, formatErrorContent } from '../lib/api-error.js';
+
+function errorToolResult(classified: ClassifiedApiError): any {
+  return {
+    isError: true,
+    content: [
+      {
+        type: 'text',
+        mimeType: 'application/json',
+        text: formatErrorContent(classified)
+      }
+    ]
+  };
+}
 
 export function createListToolsHandler() {
   return async (): Promise<any> => ({
@@ -56,30 +70,26 @@ export function createListToolsHandler() {
 }
 
 export function createCallToolHandler(url: string, getToken: () => Promise<string>) {
-  return async (request: any): Promise<any> => {
-    if (request.params.name === 'magento_rest_api') {
-      const { path, method } = request.params.arguments;
-      const body: string = request.params.arguments.body ?? '';
-      const query: string = request.params.arguments.query ?? '';
+  // Runs the request against Magento; throws ApiRequestError (classified) or
+  // raw transport errors, which the outer wrapper converts into structured
+  // isError results so clients never see a bare protocol failure.
+  const runMagentoRestApi = async (request: any): Promise<any> => {
+    const { path, method } = request.params.arguments;
+    const body: string = request.params.arguments.body ?? '';
+    const query: string = request.params.arguments.query ?? '';
 
-      // Capture exactly what the client sent (e.g. opencode's body handling
-      // quirks) before any transformation.
-      log.debug(`Incoming tool args: ${JSON.stringify(request.params.arguments)}`);
+    // Capture exactly what the client sent (e.g. opencode's body handling
+    // quirks) before any transformation.
+    log.debug(`Incoming tool args: ${JSON.stringify(request.params.arguments)}`);
 
-      const startedAt = Date.now();
-      const fullUrl = `${url}${path}${query ? (query.startsWith('?') ? query : '?' + query) : ''}`;
-      log.info(`API call: ${method} ${path}${query ? '?' + query : ''}`);
-      log.debug(`Body: ${body || 'none'}`);
-      log.debug(`Full URL: ${fullUrl}`);
+    const startedAt = Date.now();
+    const fullUrl = `${url}${path}${query ? (query.startsWith('?') ? query : '?' + query) : ''}`;
+    log.info(`API call: ${method} ${path}${query ? '?' + query : ''}`);
+    log.debug(`Body: ${body || 'none'}`);
+    log.debug(`Full URL: ${fullUrl}`);
 
-      let token: string;
-      try {
-        token = await getToken();
-      } catch (error) {
-        log.error(`Token retrieval failed for ${method} ${path}: ${error instanceof Error ? error.message : error}`);
-        throw error;
-      }
-      log.debug(`Using token: ${token.slice(0, 8)}... (${token.length} chars)`);
+    const token: string = await getToken();
+    log.debug(`Using token: ${token.slice(0, 8)}... (${token.length} chars)`);
 
       const requestHeaders = {
         ...(method !== 'GET' && method !== 'HEAD' ? { 'Content-Type': 'application/json' } : {}),
@@ -141,6 +151,15 @@ export function createCallToolHandler(url: string, getToken: () => Promise<strin
       }
       log.debug(`API response body: ${responseText}`);
 
+      // Backend-level failures (maintenance mode, auth rejection) get a
+      // structured, actionable error instead of a raw HTTP dump. Normal
+      // API-level 4xx/5xx (validation, not found, ...) still pass through.
+      const backendFailure = classifyHttpResponse(apiResponse.status, responseText, fullUrl);
+      if (backendFailure) {
+        log.error(`Backend failure for ${method} ${path}: ${backendFailure.kind} - ${backendFailure.message}`);
+        return errorToolResult(backendFailure);
+      }
+
       let json;
       try {
         json = JSON.parse(responseText);
@@ -158,8 +177,26 @@ export function createCallToolHandler(url: string, getToken: () => Promise<strin
           }
         ]
       };
-    }
+  };
 
-    throw new Error('Tool not found');
+  return async (request: any): Promise<any> => {
+    if (request.params.name !== 'magento_rest_api') {
+      return errorToolResult({
+        kind: 'unknown',
+        message: `Unknown tool: ${request.params.name}`,
+        hint: 'This server exposes a single tool named "magento_rest_api".'
+      });
+    }
+    try {
+      return await runMagentoRestApi(request);
+    } catch (error) {
+      const classified = error instanceof ApiRequestError
+        ? error.classified
+        : classifyTransportError(error);
+      log.error(
+        `Tool call failed (${request.params.name}): ${classified.kind} - ${classified.message}`
+      );
+      return errorToolResult(classified);
+    }
   };
 }

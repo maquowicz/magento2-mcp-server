@@ -2,6 +2,13 @@ import fs from 'fs/promises';
 import path from 'path';
 import { URL } from 'url';
 import { log } from '../lib/logger.js';
+import { ClassifiedApiError, classifyHttpResponse, classifyTransportError } from '../lib/api-error.js';
+
+// Resource requests surface as JSON-RPC errors carrying only the message,
+// so fold the actionable hint into it directly.
+function failResource(classified: ClassifiedApiError): never {
+  throw new Error(`${classified.message}. ${classified.hint}`);
+}
 
 export function createListResourcesHandler() {
   return async (): Promise<any> => ({
@@ -42,20 +49,59 @@ export function createReadResourceHandler(url: string, getToken: () => Promise<s
         }
         log.debug('Schema loaded from cache at:', cacheFile);
         schemaJson = cachedData.schema;
-      } catch {
-        log.debug('Fetching schema from API');
-        const token = await getToken();
+      } catch (cacheError) {
+        if (cacheError instanceof Error && cacheError.message === 'Cache expired or invalid format') {
+          log.debug('Cache expired, fetching schema from API');
+        } else {
+          log.debug('Fetching schema from API (no usable cache):', cacheError instanceof Error ? cacheError.message : cacheError);
+        }
+        const token = await getToken().catch((error: unknown) => {
+          log.error('Schema fetch: token retrieval failed:', error);
+          failResource(classifyTransportError(error, `${url}/rest/V1/integration/admin/token`));
+        });
         // The Accept header is REQUIRED: Magento returns only anonymous-area
         // services (~50 paths) unless the schema request sends
         // "Accept: application/json" (undici's default */* triggers that).
-        const response = await fetch(`${url}/rest/all/schema`, {
-          headers: {
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
-        });
+        let response;
+        try {
+          response = await fetch(`${url}/rest/all/schema`, {
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': `Bearer ${token}`
+            }
+          });
+        } catch (error) {
+          log.error('Schema fetch failed:', error);
+          failResource(classifyTransportError(error, `${url}/rest/all/schema`));
+        }
 
-        schemaJson = await response.json();
+        const schemaText = await response!.text();
+        if (!response!.ok) {
+          failResource(
+            classifyHttpResponse(response!.status, schemaText, `${url}/rest/all/schema`) ?? {
+              kind: 'http_error',
+              message: `Schema endpoint returned HTTP ${response!.status} ${response!.statusText}`,
+              hint: 'Verify the store URL and that the admin token has access to the REST schema.',
+              url: `${url}/rest/all/schema`,
+              status: response!.status,
+            }
+          );
+        }
+
+        try {
+          schemaJson = JSON.parse(schemaText);
+        } catch {
+          // Non-JSON body from a gateway/proxy usually means the backend is
+          // serving an error or maintenance page.
+          failResource(
+            classifyHttpResponse(503, schemaText, `${url}/rest/all/schema`) ?? {
+              kind: 'unknown',
+              message: 'Schema endpoint returned a non-JSON response',
+              hint: 'A proxy or gateway likely intercepted the request; check the raw body in the MCP server log.',
+              url: `${url}/rest/all/schema`,
+            }
+          );
+        }
         const cacheData = { schema: schemaJson, timestamp: Date.now() };
         await fs.writeFile(cacheFile, JSON.stringify(cacheData, null, 2));
         log.debug('Schema cached to file');

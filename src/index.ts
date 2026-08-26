@@ -7,6 +7,7 @@ import { createListToolsHandler, createCallToolHandler } from './handlers/tool.h
 import { Agent, setGlobalDispatcher, fetch } from 'undici';
 import { log } from './lib/logger.js';
 import { resolveEnvValue } from './lib/env.js';
+import { ApiRequestError, classifyHttpResponse, classifyTransportError } from './lib/api-error.js';
 
 async function decodeJWT(token: string): Promise<number> {
   try {
@@ -40,7 +41,15 @@ async function fetchToken(url: string, username: string, password: string): Prom
   if (!response.ok) {
     const errorText = await response.text();
     log.error(`Token fetch failed body: ${errorText}`);
-    throw new Error(`Failed to fetch token: ${response.status} ${response.statusText} - ${errorText}`);
+    throw new ApiRequestError(
+      classifyHttpResponse(response.status, errorText, tokenUrl) ?? {
+        kind: 'http_error',
+        message: `Token endpoint returned HTTP ${response.status} ${response.statusText}`,
+        hint: 'Verify M2_API_MCP_ADMIN_USERNAME/PASSWORD and that the account is an active admin.',
+        url: tokenUrl,
+        status: response.status,
+      }
+    );
   }
 
   const text = await response.text();
@@ -72,7 +81,7 @@ function createGetToken(url: string, initialToken?: string): () => Promise<strin
 
   log.debug(`Environment vars - M2_API_MCP_ADMIN_USERNAME present: ${!!username}, M2_API_MCP_ADMIN_PASSWORD present: ${!!password}`);
 
-  if (username && password) {
+    if (username && password) {
     return async (): Promise<string> => {
       const now = Date.now();
       log.debug(`Token check - current valid until ~${new Date(expiration - REFRESH_BUFFER).toISOString()}, now: ${new Date(now).toISOString()}`);
@@ -85,7 +94,12 @@ function createGetToken(url: string, initialToken?: string): () => Promise<strin
           log.debug('Token refreshed successfully');
         } catch (error) {
           log.error('Token refresh failed:', error);
-          throw new Error('Unable to obtain valid token');
+          if (error instanceof ApiRequestError) {
+            // HTTP-level failure already classified in fetchToken.
+            throw error;
+          }
+          // Network/transport failure (API down, DNS, TLS, timeout).
+          throw new ApiRequestError(classifyTransportError(error, `${url}/rest/V1/integration/admin/token`));
         }
       } else {
         log.debug('Using existing token');
@@ -125,8 +139,22 @@ async function main(): Promise<void> {
 
     const getToken = createGetToken(normalizedUrl, token);
 
-    const startupToken = await getToken();
-    log.debug(`Startup token fetched successfully: ${startupToken.slice(0, 8)}... (${startupToken.length} chars)`);
+    // Best-effort warm-up: if Magento is down (e.g. maintenance mode) we still
+    // start the MCP server so clients get a descriptive per-request error
+    // instead of "Connection closed" from a dead process. Only genuine config
+    // errors (missing URL/credentials) fail fast above.
+    try {
+      const startupToken = await getToken();
+      log.debug(`Startup token fetched successfully: ${startupToken.slice(0, 8)}... (${startupToken.length} chars)`);
+    } catch (error) {
+      log.warn(
+        'Startup token fetch failed; server will start anyway and retry on first request:',
+        error instanceof ApiRequestError ? error.classified.message : error instanceof Error ? error.message : error
+      );
+      process.stderr.write(
+        `[M2-MCP] WARN Magento unreachable at startup (${normalizedUrl}); tool calls will return a descriptive error until it is reachable.\n`
+      );
+    }
 
     const server = new Server(
       {
