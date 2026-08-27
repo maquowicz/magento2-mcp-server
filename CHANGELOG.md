@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- **`body` JSON escaping fix**: `magento_rest_api` now accepts `body` as a JSON object/array (serialized automatically) in addition to a string, eliminating the multi-level backslash escaping required for nested JSON-string attributes (e.g. `content_constructor_content`). Added optional `bodyFile` parameter to read a prepared JSON payload file verbatim (mutually exclusive with `body`). String bodies are pre-flight validated: malformed JSON returns a structured `invalid_request` error with the parse position instead of Magento's cryptic `Syntax error`, and bodies that parse to a top-level JSON string (pasted `json.dumps`/`JSON.stringify` output with surrounding quotes) are rejected with a hint.
 - Documented Magento's store-code URL mechanism (`/rest/{storeCode}/V1/...`, `all` = global scope / store_id 0) in the `magento://rest/schema` resource (searchable via `store`/`all`/`storeCode`/`scope`) and in the `magento_rest_api` tool descriptions.
 - Added optional `storeCode` parameter to `magento_rest_api`: rewrites `/rest/V1/...` to `/rest/{storeCode}/V1/...` so agents can target any store (including global `all`) without knowing the URL convention. Conflicts/malformed codes return a structured `invalid_request` error.
 

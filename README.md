@@ -231,7 +231,23 @@ Parameters:
 - `method`: HTTP method — `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`.
   GET/HEAD for reads (no body); POST=create, PUT=update, PATCH=partial update,
   DELETE=remove (JSON body required).
-- `body`: JSON request body string. Required for POST/PUT/PATCH/DELETE; use `""` for GET/HEAD.
+- `body`: JSON request body for POST/PUT/PATCH/DELETE. Two forms are accepted:
+  - **Object/array (recommended)** — pass the payload directly as a JSON value;
+    the server serializes it. Nested JSON-string attributes (e.g.
+    `content_constructor_content`) need only normal JSON escaping, so no
+    multi-level backslash doubling is required:
+    ```json
+    {"category": {"custom_attributes": [{"attribute_code": "content_constructor_content", "value": "[{\"name\": \"Image Teaser\"}]"}]}}
+    ```
+  - **String** — pass the exact JSON document text (sent verbatim). If the
+    document contains nested JSON strings, escape them once more for the
+    tool-call layer (e.g. a `\"` inside the document becomes `\\\"` in this
+    string). Malformed JSON is rejected before the request with a structured
+    error (including the parse position) instead of a Magento `Syntax error`.
+- `bodyFile`: optional path to a local JSON payload file read verbatim as the
+  request body (zero escaping) — ideal for large or machine-generated payloads
+  (e.g. a `build-body.py` → `put-body-global.json` workflow). Relative paths
+  resolve against the MCP client workspace (CWD). Mutually exclusive with `body`.
 - `query`: URL-encoded query string (leading `?` optional; omit for no params).
 - `storeCode`: optional store code to target for this request (rewrites the URL
   to `/rest/{storeCode}/V1/...`). Use `"all"` for global scope (All Store Views,

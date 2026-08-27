@@ -1,8 +1,9 @@
 import { Agent, fetch } from 'undici';
 import { log } from '../lib/logger.js';
-import { coerceBooleans, containsBoolean, isTypeValidationError, parseJsonSafe } from '../lib/bool-coerce.js';
+import { coerceBooleans, containsBoolean, isTypeValidationError } from '../lib/bool-coerce.js';
 import { ApiRequestError, ClassifiedApiError, classifyHttpResponse, classifyTransportError, formatErrorContent } from '../lib/api-error.js';
 import { applyStoreCode } from '../lib/store-code.js';
+import { resolveBody } from '../lib/body.js';
 
 function errorToolResult(classified: ClassifiedApiError): any {
   return {
@@ -54,10 +55,27 @@ export function createListToolsHandler() {
             ].join(' ')
           },
           body: {
+            description: [
+              'JSON request body for POST/PUT/PATCH/DELETE. Two forms are accepted:',
+              '(1) OBJECT/ARRAY (recommended): pass the payload directly as a JSON value; the server serializes it. Nested JSON-string attributes (e.g. content_constructor_content) need only normal JSON escaping:',
+              '    {"category": {"custom_attributes": [{"attribute_code": "content_constructor_content", "value": "[{\\"name\\": \\"Teaser\\"}]"}]}}',
+              '(2) STRING: pass the exact JSON document text (sent verbatim). If it contains nested JSON strings, escape them for the tool-call layer as well: a \\" inside the document becomes \\\\\\" in this string.',
+              'Boolean-typed flags may be sent as true/false or 1/0 — if the endpoint expects ints (e.g. is_active), booleans are automatically retried as 1/0.',
+              'Omit or pass empty string "" for GET/HEAD.'
+            ].join(' '),
+            anyOf: [
+              { type: 'string', description: 'Raw JSON document text, sent as-is.' },
+              { type: 'object', description: 'JSON object payload; serialized automatically.' },
+              { type: 'array', description: 'JSON array payload (e.g. bulk endpoints); serialized automatically.' }
+            ]
+          },
+          bodyFile: {
             type: 'string',
             description: [
-              'JSON request body string. Required only for POST/PUT/PATCH/DELETE; omit or pass empty string "" for GET/HEAD.',
-              'Boolean-typed flags may be sent as true/false or 1/0 — if the endpoint expects ints (e.g. is_active), booleans are automatically retried as 1/0.'
+              'Optional path to a local JSON payload file; its contents are read and sent verbatim as the request body (no escaping needed).',
+              'Ideal for large or machine-generated payloads (e.g. a build-body.py -> put-body-global.json workflow).',
+              'Relative paths resolve against the MCP client workspace (CWD); use an absolute path otherwise.',
+              'Mutually exclusive with `body`. Ignored for GET/HEAD.'
             ].join(' ')
           },
           query: {
@@ -88,7 +106,8 @@ export function createCallToolHandler(url: string, getToken: () => Promise<strin
   const runMagentoRestApi = async (request: any): Promise<any> => {
     const { path, method } = request.params.arguments;
     const storeCode: string | undefined = request.params.arguments.storeCode ?? undefined;
-    const body: string = request.params.arguments.body ?? '';
+    const body: unknown = request.params.arguments.body;
+    const bodyFile: string | undefined = request.params.arguments.bodyFile;
     const query: string = request.params.arguments.query ?? '';
 
     // Capture exactly what the client sent (e.g. opencode's body handling
@@ -99,7 +118,14 @@ export function createCallToolHandler(url: string, getToken: () => Promise<strin
     const finalPath = applyStoreCode(path, storeCode);
     const fullUrl = `${url}${finalPath}${query ? (query.startsWith('?') ? query : '?' + query) : ''}`;
     log.info(`API call: ${method} ${finalPath}${query ? '?' + query : ''}`);
-    log.debug(`Body: ${body || 'none'}`);
+
+    // GET/HEAD never carry a request body; normalize only for writes.
+    // Pre-flight validation (lib/body) catches malformed/over-escaped JSON
+    // here with a structured error instead of a cryptic Magento parse failure.
+    const isWrite = method !== 'GET' && method !== 'HEAD';
+    const parsedBody = isWrite ? await resolveBody(body, bodyFile) : undefined;
+    const bodyText = parsedBody?.text ?? '';
+    log.debug(`Body: ${bodyText || 'none'}`);
     log.debug(`Full URL: ${fullUrl}`);
 
     const token: string = await getToken();
@@ -129,7 +155,7 @@ export function createCallToolHandler(url: string, getToken: () => Promise<strin
 
       let apiResponse: Awaited<ReturnType<typeof fetch>>;
       try {
-        apiResponse = await doFetch(body);
+        apiResponse = await doFetch(bodyText);
       } catch (error) {
         log.error(`Request failed for ${method} ${path}: ${error instanceof Error ? error.message : error}`);
         throw error;
@@ -147,10 +173,10 @@ export function createCallToolHandler(url: string, getToken: () => Promise<strin
       // both input styles work without breaking endpoints that expect real booleans.
       if (
         !apiResponse.ok &&
-        method !== 'GET' && method !== 'HEAD' && body &&
+        isWrite && bodyText &&
         isTypeValidationError(apiResponse.status, responseText)
       ) {
-        const parsed = parseJsonSafe(body);
+        const parsed = parsedBody?.value;
         if (parsed !== undefined && containsBoolean(parsed)) {
           const coercedBody = JSON.stringify(coerceBooleans(parsed));
           log.info(`Retrying ${method} ${path} with booleans coerced to 1/0`);
