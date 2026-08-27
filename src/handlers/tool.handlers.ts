@@ -2,6 +2,7 @@ import { Agent, fetch } from 'undici';
 import { log } from '../lib/logger.js';
 import { coerceBooleans, containsBoolean, isTypeValidationError, parseJsonSafe } from '../lib/bool-coerce.js';
 import { ApiRequestError, ClassifiedApiError, classifyHttpResponse, classifyTransportError, formatErrorContent } from '../lib/api-error.js';
+import { applyStoreCode } from '../lib/store-code.js';
 
 function errorToolResult(classified: ClassifiedApiError): any {
   return {
@@ -23,6 +24,7 @@ export function createListToolsHandler() {
       description: [
         'Run a Magento 2 REST API request against the configured store.',
         'Discover exact endpoints and field names via the magento://rest/schema resource (add ?search= to filter).',
+        'Store scope: use the storeCode parameter (or put it directly in the path after /rest) to target a store for reads AND writes; storeCode "all" = global scope (All Store Views, store_id 0).',
         'Reads (GET/HEAD) are safe on any endpoint; writes (POST/PUT/PATCH/DELETE) require a JSON body.'
       ].join(' '),
       inputSchema: {
@@ -33,13 +35,23 @@ export function createListToolsHandler() {
             description: [
               'REST API path starting with /rest, e.g. /rest/V1/products, /rest/V1/products/{sku},',
               '/rest/V1/orders, /rest/V1/customers/search, /rest/V1/cmsPage/search, /rest/V1/cmsBlock/search,',
-              '/rest/V1/categories/list, /rest/V1/products/attributes, /rest/V1/store/storeConfigs, /rest/V1/search.'
+              '/rest/V1/categories/list, /rest/V1/products/attributes, /rest/V1/store/storeConfigs, /rest/V1/search.',
+              'Store scope: prepend a store code after /rest to target a store for reads AND writes, e.g. /rest/all/V1/products/{sku} = global scope (store_id 0);',
+              '/rest/V1/products/{sku} = default store view. Writes do NOT accept ?storeId= (scope is set by the URL store code only).'
             ].join(' ')
           },
           method: {
             type: 'string',
             enum: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
             description: 'HTTP method. GET/HEAD for reads (no body). POST=create, PUT=update, PATCH=partial update, DELETE=remove (JSON body required).'
+          },
+          storeCode: {
+            type: 'string',
+            description: [
+              'Optional Magento store code to target for this request; prepends {storeCode} into the URL (/rest/{storeCode}/V1/...).',
+              'Use "all" for global scope (All Store Views, store_id 0); without it, requests target the default store view.',
+              'For writes (POST/PUT/PATCH/DELETE) this is the ONLY way to choose the scope. Equivalent to putting the code directly in `path`.'
+            ].join(' ')
           },
           body: {
             type: 'string',
@@ -75,6 +87,7 @@ export function createCallToolHandler(url: string, getToken: () => Promise<strin
   // isError results so clients never see a bare protocol failure.
   const runMagentoRestApi = async (request: any): Promise<any> => {
     const { path, method } = request.params.arguments;
+    const storeCode: string | undefined = request.params.arguments.storeCode ?? undefined;
     const body: string = request.params.arguments.body ?? '';
     const query: string = request.params.arguments.query ?? '';
 
@@ -83,8 +96,9 @@ export function createCallToolHandler(url: string, getToken: () => Promise<strin
     log.debug(`Incoming tool args: ${JSON.stringify(request.params.arguments)}`);
 
     const startedAt = Date.now();
-    const fullUrl = `${url}${path}${query ? (query.startsWith('?') ? query : '?' + query) : ''}`;
-    log.info(`API call: ${method} ${path}${query ? '?' + query : ''}`);
+    const finalPath = applyStoreCode(path, storeCode);
+    const fullUrl = `${url}${finalPath}${query ? (query.startsWith('?') ? query : '?' + query) : ''}`;
+    log.info(`API call: ${method} ${finalPath}${query ? '?' + query : ''}`);
     log.debug(`Body: ${body || 'none'}`);
     log.debug(`Full URL: ${fullUrl}`);
 

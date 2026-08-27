@@ -11,6 +11,7 @@ export type ApiErrorKind =
   | 'maintenance_mode'
   | 'auth_failed'
   | 'http_error'
+  | 'invalid_request'
   | 'unknown';
 
 export interface ClassifiedApiError {

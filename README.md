@@ -233,6 +233,40 @@ Parameters:
   DELETE=remove (JSON body required).
 - `body`: JSON request body string. Required for POST/PUT/PATCH/DELETE; use `""` for GET/HEAD.
 - `query`: URL-encoded query string (leading `?` optional; omit for no params).
+- `storeCode`: optional store code to target for this request (rewrites the URL
+  to `/rest/{storeCode}/V1/...`). Use `"all"` for global scope (All Store Views,
+  store_id 0). Equivalent to putting the code directly in `path`.
+
+#### Store scope (store-code URL)
+
+Magento routes REST requests to a store scope via a store code in the URL:
+`/rest/{storeCode}/V1/...`. This works for **both reads and writes**, unlike the
+`?storeId=` query parameter, which read endpoints accept but write endpoints
+(Post/PUT/PATCH/DELETE) ignore — for writes the scope is chosen **only** by the
+store code in the URL.
+
+- `/rest/all/V1/...` — global scope ("All Store Views", store_id 0)
+- `/rest/{storeCode}/V1/...` — that store's scope
+- `/rest/V1/...` — default store view scope
+
+Examples:
+```typescript
+// Global-scope write (save at store_id 0) — via storeCode parameter:
+const response = await mcp.magento_rest_api({
+  path: "/rest/V1/categories/23",
+  method: "PUT",
+  storeCode: "all",
+  body: JSON.stringify({ category: { is_active: true } })
+});
+// ...or directly in the path:
+//   path: "/rest/all/V1/categories/23"
+
+// Global-scope read (equivalent to ?storeId=0):
+const globalRead = await mcp.magento_rest_api({
+  path: "/rest/all/V1/categories/23",
+  method: "GET"
+});
+```
 
 Example usage in MCP client:
 ```typescript
@@ -281,6 +315,8 @@ Access the full Magento REST API schema or a filtered subset to avoid large cont
   Matches using regex (e.g., paths starting with /V1/products). Flags like /i for case-insensitive can be added. For exact paths, use regex with escaped slashes like `/V1/eav\/attribute-options/i`.
 
 Returns a filtered JSON subset mirroring the schema structure, or `{}` if no matches.
+
+The schema also documents Magento's **store-code URL mechanism** (in `info.description`): prepend a store code after `/rest` to target a store for reads and writes (`/rest/{storeCode}/V1/...`); code `all` = global scope (store_id 0). Search `?search=store`, `?search=storeCode`, or `?search=scope` to surface it. Note that write endpoints do not accept a `storeId` query parameter — scope is set only by the store code in the URL.
 
 ## Development
 

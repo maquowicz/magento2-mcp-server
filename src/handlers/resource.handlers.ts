@@ -3,6 +3,7 @@ import path from 'path';
 import { URL } from 'url';
 import { log } from '../lib/logger.js';
 import { ClassifiedApiError, classifyHttpResponse, classifyTransportError } from '../lib/api-error.js';
+import { injectStoreCodeNote } from '../lib/store-code.js';
 
 // Resource requests surface as JSON-RPC errors carrying only the message,
 // so fold the actionable hint into it directly.
@@ -108,6 +109,10 @@ export function createReadResourceHandler(url: string, getToken: () => Promise<s
       }
 
       let text: string;
+      // Document the store-code URL mechanism (e.g. /rest/all/V1/... = global
+      // scope) inside the schema's info.description so it is visible in the
+      // full resource AND matched by ?search= keyword queries.
+      schemaJson = injectStoreCodeNote(schemaJson);
       if (searchQuery) {
         log.debug('Schema search query:', searchQuery);
         const filteredJson = searchSchema(schemaJson, searchQuery);
@@ -132,7 +137,7 @@ export function createReadResourceHandler(url: string, getToken: () => Promise<s
   };
 }
 
-function searchSchema(schema: any, query: string): any {
+export function searchSchema(schema: any, query: string): any {
   if (!schema || typeof schema !== 'object' || !schema.paths || typeof schema.paths !== 'object') {
     return {};
   }
