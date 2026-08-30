@@ -32,6 +32,11 @@ describe('classifyTransportError', () => {
     expect(classifyTransportError(error).kind).toBe('timeout');
   });
 
+  it('classifies undici AbortSignal.timeout aborts as timeout', () => {
+    const error = Object.assign(new Error('The operation was aborted'), { code: 'UND_ERR_ABORTED' });
+    expect(classifyTransportError(error).kind).toBe('timeout');
+  });
+
   it('falls back to unknown with the raw message preserved', () => {
     const result = classifyTransportError(new Error('something weird'));
     expect(result.kind).toBe('unknown');

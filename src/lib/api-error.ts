@@ -105,6 +105,7 @@ export function classifyTransportError(error: unknown, url?: string): Classified
 
   if (
     code === 'ABORT_ERR' ||
+    code === 'UND_ERR_ABORTED' ||
     code === 'ETIMEDOUT' ||
     code === 'UND_ERR_HEADERS_TIMEOUT' ||
     code === 'UND_ERR_BODY_TIMEOUT'

@@ -332,6 +332,8 @@ Access the full Magento REST API schema or a filtered subset to avoid large cont
 
 Returns a filtered JSON subset mirroring the schema structure, or `{}` if no matches.
 
+The schema is **cached** for 1 hour (`.data/cache/schema.json`). If a refresh fails (backend 5xx, maintenance mode, gateway error), the server falls back to the last cached copy and logs a warning — an expired-but-valid schema beats a hard failure. Add `?refresh=1` (or `?force=1`) to bypass the cache and force a fresh fetch. If the fetch fails **and** no cached copy exists, the read returns a structured error document (`{error, kind, message, hint, url, status}`) instead of a generic client-side "Failed to read MCP resource".
+
 The schema also documents Magento's **store-code URL mechanism** (in `info.description`): prepend a store code after `/rest` to target a store for reads and writes (`/rest/{storeCode}/V1/...`); code `all` = global scope (store_id 0). Search `?search=store`, `?search=storeCode`, or `?search=scope` to surface it. Note that write endpoints do not accept a `storeId` query parameter — scope is set only by the store code in the URL.
 
 ## Development
@@ -507,7 +509,7 @@ This will allow you to set breakpoints, inspect variables, and step through the 
 - **Per-profile `.env`**: Set `M2_API_MCP_ENV_PROFILE` to load `.env.<profile>` for per-agent configurations.
 - **`{env:...}` Resolution**: Server resolves `{env:VAR}` patterns as a fallback with circular-loop detection.
 - **MCP Integration**: Tested with Cline and opencode; supports stdio transport for tools like magento_rest_api.
-- **Schema Caching**: File-based caching for REST API schema in .data/cache/schema.json with 1-hour expiration.
+- **Schema Caching**: File-based caching for REST API schema in .data/cache/schema.json with 1-hour expiration; on refresh failure the last cached copy is served (stale-while-revalidate). `?refresh=1` forces a fresh fetch. Failed schema reads return a structured `{kind, message, hint}` document.
 
 ## Changelog
 
